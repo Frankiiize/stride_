@@ -2,13 +2,17 @@ services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: auditoria
+    env_file:
+      - .env
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "Password123!"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?Defina MSSQL_SA_PASSWORD en .env}"
     ports:
       - "1433:1433"
     volumes:
       - sqlserver-data:/var/opt/mssql
+      - ./setup.sql:/scripts/setup.sql:ro
+      - ./sql:/scripts/sql:ro
 
 volumes:
   sqlserver-data:
