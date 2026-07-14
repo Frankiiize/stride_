@@ -19,36 +19,6 @@ BEGIN
 END
 GO
 
-IF COL_LENGTH('dbo.Usuarios', 'Password') IS NULL
-BEGIN
-    ALTER TABLE dbo.Usuarios ADD Password VARCHAR(255);
-END
-GO
-
-IF COL_LENGTH('dbo.Usuarios', 'FailedAttempts') IS NULL
-BEGIN
-    ALTER TABLE dbo.Usuarios ADD FailedAttempts INT NOT NULL DEFAULT 0;
-END
-GO
-
-IF COL_LENGTH('dbo.Usuarios', 'LockoutUntil') IS NULL
-BEGIN
-    ALTER TABLE dbo.Usuarios ADD LockoutUntil DATETIME2 NULL;
-END
-GO
-
-IF COL_LENGTH('dbo.Usuarios', 'PasswordHash') IS NOT NULL
-BEGIN
-    EXEC('
-        UPDATE dbo.Usuarios
-        SET Password = PasswordHash
-        WHERE Password IS NULL;
-
-        ALTER TABLE dbo.Usuarios DROP COLUMN PasswordHash;
-    ');
-END
-GO
-
 IF OBJECT_ID('dbo.Clientes', 'U') IS NULL
 BEGIN
     CREATE TABLE Clientes (

@@ -2,6 +2,7 @@ using System;
 using System.Data.SqlClient;
 using System.IO;
 using DotNetEnv;
+using static BCrypt.Net.BCrypt;
 
 namespace AppVulnerable
 {
@@ -11,6 +12,7 @@ namespace AppVulnerable
         const int LockoutMinutes = 5;
 
         static string connString;
+        static string usuarioLogueado;
 
         static void Main(string[] args)
         {
@@ -35,7 +37,7 @@ namespace AppVulnerable
             while (true)
             {
                 Console.WriteLine("\n--- Sistema de Gestión ---");
-                Console.WriteLine("1. Iniciar Sesión\n2. Buscar Cliente (ID)\n3. Salir");
+                Console.WriteLine("1. Iniciar Sesión\n2. Registrar Usuario\n3. Buscar Cliente (ID)\n4. Salir");
                 string opcion = Console.ReadLine();
 
                 if (opcion == null)
@@ -50,9 +52,12 @@ namespace AppVulnerable
                         Login();
                         break;
                     case "2":
-                        BuscarCliente();
+                        UserSignUp();
                         break;
                     case "3":
+                        BuscarCliente();
+                        break;
+                    case "4":
                         return;
                     default:
                         Log(LogLevel.Warn, $"Opcion de menu invalida: {opcion}");
@@ -106,9 +111,10 @@ namespace AppVulnerable
 
                         reader.Close();
 
-                        if (BCrypt.Net.BCrypt.Verify(pass, storedPassword))
+                        if (Verify(pass, storedPassword))
                         {
                             ResetLoginAttempts(conn, user);
+                            usuarioLogueado = user;
                             Log(LogLevel.Info, $"Login exitoso usuario: {user}");
                             Console.WriteLine("Login exitoso!");
                         }
@@ -128,8 +134,71 @@ namespace AppVulnerable
             }
         }
 
+        static void UserSignUp()
+        {
+            Console.Write("Nuevo usuario: ");
+            string user = Console.ReadLine();
+
+            Console.Write("Password: ");
+            string pass = Console.ReadLine();
+
+            if (string.IsNullOrWhiteSpace(user) || user.Length > 50)
+            {
+                Console.WriteLine("Ingrese un usuario valido.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(pass) || pass.Length < 6)
+            {
+                Console.WriteLine("Ingrese una password de al menos 6 caracteres.");
+                return;
+            }
+
+            try
+            {
+                using (SqlConnection conn = new SqlConnection(connString))
+                {
+                    conn.Open();
+
+                    string existsSql = "SELECT COUNT(1) FROM Usuarios WHERE Username = @username";
+                    SqlCommand existsCmd = new SqlCommand(existsSql, conn);
+                    existsCmd.Parameters.AddWithValue("@username", user);
+
+                    int existingUsers = Convert.ToInt32(existsCmd.ExecuteScalar());
+                    if (existingUsers > 0)
+                    {
+                        Log(LogLevel.Warn, $"Registro rechazado por usuario existente: {user}");
+                        Console.WriteLine("El usuario ya existe.");
+                        return;
+                    }
+
+                    string passwordHash = HashPassword(pass, workFactor: 12);
+                    string insertSql = "INSERT INTO Usuarios (Username, Password) VALUES (@username, @password)";
+                    SqlCommand insertCmd = new SqlCommand(insertSql, conn);
+                    insertCmd.Parameters.AddWithValue("@username", user);
+                    insertCmd.Parameters.AddWithValue("@password", passwordHash);
+                    insertCmd.ExecuteNonQuery();
+
+                    Log(LogLevel.Info, $"Usuario registrado: {user}");
+                    Console.WriteLine("Usuario registrado correctamente.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log(LogLevel.Error, "Error al registrar usuario.", ex);
+                Console.WriteLine("Ocurrio un error al procesar la solicitud.");
+            }
+        }
+
         static void BuscarCliente()
         {
+            if (!IsUserAuth())
+            {
+                Console.WriteLine("Debe iniciar sesion para buscar clientes.");
+                Log(LogLevel.Warn, "Busqueda de cliente rechazada: usuario no autenticado.");
+                return;
+            }
+
             Console.Write("Ingrese ID: ");
             string id = Console.ReadLine();
 
@@ -158,6 +227,11 @@ namespace AppVulnerable
                 Log(LogLevel.Error, "Error al buscar cliente.", ex);
                 Console.WriteLine("Ocurrio un error al procesar la solicitud.");
             }
+        }
+
+        static bool IsUserAuth()
+        {
+            return !string.IsNullOrWhiteSpace(usuarioLogueado);
         }
 
         enum LogLevel
